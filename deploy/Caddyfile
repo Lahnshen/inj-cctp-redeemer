@@ -1,0 +1,29 @@
+# Traffic arrives through a Cloudflare Tunnel (cloudflared on this machine), so Caddy only listens on
+# localhost and the server's IP never appears in DNS. Domain and HTTPS live at Cloudflare.
+# cloudflared passes the visitor's IP in CF-Connecting-IP; trust it only from this machine.
+{
+	servers {
+		trusted_proxies static 127.0.0.1/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+:8080 {
+	bind 127.0.0.1
+	encode zstd gzip
+
+	# API: https://your.domain/api/tx/0x… is served by http://127.0.0.1:3000/tx/0x…
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:3000 {
+			# The API reads the visitor IP from X-Forwarded-For (TRUST_PROXY=true); hand it the real one.
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	# UI: the built frontend
+	handle {
+		root * /opt/inj-cctp-redeemer/frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
